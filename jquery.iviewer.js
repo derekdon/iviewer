@@ -126,6 +126,10 @@ $.widget( "ui.iviewer", $.ui.mouse, {
     widgetEventPrefix: "iviewer",
     options : {
         /**
+        * If specified the tag with this id will be initialised
+        **/
+        tagId: null,
+        /**
         * start zoom value for element, not used now
         * may be equal to "fit" to fit element into container or scale in %
         **/
@@ -245,7 +249,7 @@ $.widget( "ui.iviewer", $.ui.mouse, {
         *   @canvas_object.orig_{width|height} - original dimensions
         *   @canvas_object.display_{width|height} - actual dimensions
         */
-        this.canvas_object = new $.ui.iviewer.CanvasObject(this.options.zoom_animation);
+        this.canvas_object = new $.ui.iviewer.CanvasObject(this.options.zoom_animation, this.options.tagId);
 
         this.zoom_object = {}; //object to show zoom status
 
@@ -327,7 +331,9 @@ $.widget( "ui.iviewer", $.ui.mouse, {
         this.element_object.object()
             //bind mouse events
             .click(function(e){return me._click(e)})
-                .prependTo(this.container);
+
+        if(!this.options.tagId)
+            this.element_object.object().prependTo(this.container);
 
         this.container.bind('mousemove', function(ev) { me._handleMouseMove(ev); });
 
@@ -915,9 +921,10 @@ $.ui.iviewer.ImageObject = function(do_anim) {
  *     extending canvas prototype.
  * @constructor
  * @param {boolean} do_anim Do we want to animate canvas on dimension changes?
+ * @param {string} tagId Tag id of an existing canvas element
  */
-$.ui.iviewer.CanvasObject = function(do_anim) {
-    this._canvas = $("<canvas>");
+$.ui.iviewer.CanvasObject = function(do_anim, tagId) {
+    this._canvas = tagId ? $(tagId): $("<canvas>");
 
     //this is needed, because chromium sets them auto otherwise
     this._setCss(this._requiredCss);
@@ -925,7 +932,10 @@ $.ui.iviewer.CanvasObject = function(do_anim) {
     this._do_anim = do_anim || false;
 
     // Just give the canvas object some values during testing...
-	this._reset(600, 300);
+    if(tagId == null)
+	    this._reset(600, 300); // Figure how we want to do this
+    else
+        this._reset(this._canvas.width(), this._canvas.height());
 };
 
 /** @lends $.ui.iviewer.CompatibleObject.prototype */

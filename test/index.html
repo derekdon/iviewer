@@ -12,6 +12,7 @@
 			$(document).ready(function(){
 				var ivCanvas = $("#ivCanvas").iviewer(
 				{
+					tagId: "#mainCanvas",
 					zoom: 100,
 					isCanvas: true
 				});
@@ -46,17 +47,14 @@
 					return false;
 				});
 
-				// Testing only, make this clean or redundant
-				var canvas = $("#ivCanvas").children("canvas");
-				canvas.width(600);
-				canvas.height(300);
-
-				if (canvas[0].getContext){
-					var ctx = canvas[0].getContext('2d');
-					ctx.fillRect(75,75,80,80);
-					ctx.clearRect(95,95,40,40);
-					ctx.strokeRect(100,100,30,30);
-				}
+				var canvas = document.getElementById("mainCanvas");
+				var ctx = canvas.getContext("2d");
+				ctx.fillRect(25,755,20,20);
+				ctx.fillRect(375,375,80,80);
+				ctx.clearRect(395,395,40,40);
+				ctx.strokeRect(300,300,30,30);
+				ctx.fillRect(675,575,180,180);
+				ctx.strokeRect(675,100,70,50);
             });
         </script>
         <link rel="stylesheet" href="../jquery.iviewer.css" />
@@ -73,6 +71,11 @@
             {
                 overflow: hidden;
             }
+
+			#mainCanvas
+			{
+				border: 1px solid red;
+			}
         </style>
     </head>
     <body>
@@ -88,7 +91,12 @@
                 <a id="moveto" href="#">MoveTo Test</a>
                 <a id="zoomMove" href="#">Set Zoom &amp; Move Test</a>
             </span>
-			<div id="ivCanvas" class="viewer" width="600" height="300"></div>
+			<div id="ivCanvas" class="viewer">
+				<!-- Upper Canvas -->
+				<canvas id="mainCanvas" width="1000px" height="800px"></canvas>
+				<!-- Lower Canvas for globalCompositeOperations -->
+				<canvas id="lowerCanvas" style="display:none;"></canvas>
+			</div>
 			<br />
             <div id="ivImage1" class="viewer"></div>
             <br />
