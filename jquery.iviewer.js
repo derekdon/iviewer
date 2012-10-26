@@ -1087,7 +1087,7 @@ $.ui.iviewer.CanvasObject = function(do_anim) {
             });
         }
 
-        var swapDims = this._swapDimensions, obj = this._getObject(), setCss = this._setCss;
+        var swapDims = this._swapDimensions, obj = this._getObject();
 
         //here we come: another IE oddness. If the object is rotated 90 degrees with a filter, than
         //width and height getters return real width and height of rotated object. The bad news
@@ -1113,12 +1113,12 @@ $.ui.iviewer.CanvasObject = function(do_anim) {
                             var percent = (now - fx.start) / (fx.end - fx.start);
                             obj.height(ieh + iedh * percent);
                             obj.width(iew + iedw * percent);
-                            setCss({top: now})
+                            obj.css({top: now})
                         }
                     }
                 });
         } else {
-            setCss(params);
+            obj.css(params);
             setTimeout(complete, 0); //both if branches should behave equally.
         }
     };
