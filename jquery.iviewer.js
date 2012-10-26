@@ -177,6 +177,12 @@ $.widget( "ui.iviewer", $.ui.mouse, {
         **/
         onAfterZoom: jQuery.noop,
         /**
+        * event is triggered when move has completed
+        * @param object coords move coordinates
+        * @return object coords move coordinates
+        **/
+        onAfterMove: jQuery.noop,
+        /**
         * event is fired on drag begin
         * @param object coords mouse coordinates on the element
         * @return boolean if false is returned, drag action is aborted
@@ -214,9 +220,9 @@ $.widget( "ui.iviewer", $.ui.mouse, {
         * event is fired when an image element load error occurs
         */
         onErrorLoad: null,
-		
-		onAfterMove: jQuery.noop,
-
+        /**
+        * Work this out from the tag type?
+        */
 		isCanvas: false
 	},
 
@@ -876,22 +882,32 @@ $.widget( "ui.iviewer", $.ui.mouse, {
 } );
 
 /**
+ * @class $.ui.iviewer.CompatibleObject Class represents a compatible html object and provides public api.
+ * @constructor
+ */
+$.ui.iviewer.CompatibleObject = function() {
+    this._requiredCss = { position: "absolute", top :"0px", left: "0px"};
+    this._swapDimensions = false;
+    this._do_anim = false;
+    this.x(0, true);
+    this.y(0, true);
+    this._angle = 0;
+};
+
+/**
  * @class $.ui.iviewer.ImageObject Class represents image and provides public api without
  *     extending image prototype.
  * @constructor
  * @param {boolean} do_anim Do we want to animate image on dimension changes?
  */
 $.ui.iviewer.ImageObject = function(do_anim) {
-    this._img = $("<img>")
-            //this is needed, because chromium sets them auto otherwise
-            .css({ position: "absolute", top :"0px", left: "0px"});
+    this._img = $("<img>");
 
-    this._loaded = false;
-    this._swapDimensions = false;
+    //this is needed, because chromium sets them auto otherwise
+    this._setCss(this._requiredCss);
+
     this._do_anim = do_anim || false;
-    this.x(0, true);
-    this.y(0, true);
-    this.angle(0);
+    this._loaded = false;
 };
 
 /**
@@ -901,28 +917,36 @@ $.ui.iviewer.ImageObject = function(do_anim) {
  * @param {boolean} do_anim Do we want to animate canvas on dimension changes?
  */
 $.ui.iviewer.CanvasObject = function(do_anim) {
-    this._canvas = $("<canvas>")
-            //this is needed, because chromium sets them auto otherwise
-            .css({ position: "absolute", top :"0px", left: "0px"});
+    this._canvas = $("<canvas>");
 
-    this._swapDimensions = false;
+    //this is needed, because chromium sets them auto otherwise
+    this._setCss(this._requiredCss);
+
     this._do_anim = do_anim || false;
-    this.x(0, true);
-    this.y(0, true);
+
+    // Just give the canvas object some values during testing...
 	this._reset(600, 300);
 };
 
-
-/** @lends $.ui.iviewer.ImageObject.prototype */
+/** @lends $.ui.iviewer.CompatibleObject.prototype */
 (function() {
+
+    /**
+     * Get the sub class object. Override this.
+     *
+     * @return {object}
+     */
+    this._getObject = function() {
+        return null;
+    };
+
     /**
      * Restore initial object state.
      *
-     * @param {number} w Image width.
-     * @param {number} h Image height.
+     * @param {number} w Object width.
+     * @param {number} h Object height.
      */
     this._reset = function(w, h) {
-        this._angle = 0;
         this._swapDimensions = false;
         this.x(0);
         this.y(0);
@@ -931,6 +955,186 @@ $.ui.iviewer.CanvasObject = function(do_anim) {
         this.orig_height(h);
         this.display_width(w);
         this.display_height(h);
+    };
+
+    this._dimension = function(prefix, name) {
+        var horiz = '_' + prefix + '_' + name,
+            vert = '_' + prefix + '_' + (name === 'height' ? 'width' : 'height');
+        return setter(function(val) {
+                this[this._swapDimensions ? horiz: vert] = val;
+            },
+            function() {
+                return this[this._swapDimensions ? horiz: vert];
+            });
+    };
+
+    /**
+     * Getters and setter for common object dimensions.
+     *    display_ means real object dimensions
+     *    orig_ means physical object dimensions.
+     *  Note, that dimensions are swapped if object is rotated. It necessary,
+     *  because as little as possible code should know about rotation.
+     */
+    this.display_width = this._dimension('display', 'width'),
+    this.display_height = this._dimension('display', 'height'),
+    this.display_diff = function() { return Math.floor( this.display_width() - this.display_height() ) };
+    this.orig_width = this._dimension('orig', 'width'),
+    this.orig_height = this._dimension('orig', 'height'),
+
+    /**
+     * Set the object css.
+     *
+     * @param {object} cssObject Object containing css style properties.
+     */
+    this._setCss = function(cssObject) {
+        var obj = this._getObject ? this._getObject() : null;
+        if(obj)
+            obj.css(cssObject);
+    };
+
+    /**
+     * Setter for  X coordinate. If object is rotated we need to also shift the
+     *     object to map object coordinate to the visual position.
+     *
+     * @param {number} val Coordinate value.
+     * @param {boolean} skipCss If true, we only set the value and do not touch the dom.
+     */
+    this.x = setter(function(val, skipCss) {
+            this._x = val;
+            if (!skipCss) {
+                this._setCss({left: this._x + (this._swapDimensions ? this.display_diff() / 2 : 0) + "px"});
+            }
+        },
+        function() {
+            return this._x;
+        });
+
+    /**
+     * Setter for  Y coordinate. If object is rotated we need to also shift the
+     *     object to map object coordinate to the visual position.
+     *
+     * @param {number} val Coordinate value.
+     * @param {boolean} skipCss If true, we only set the value and do not touch the dom.
+     */
+    this.y = setter(function(val, skipCss) {
+            this._y = val;
+            if (!skipCss) {
+                this._setCss({top: this._y - (this._swapDimensions ? this.display_diff() / 2 : 0) + "px"});
+            }
+        },
+       function() {
+            return this._y;
+       });
+
+    /**
+     * Map point in the container coordinates to the point in object coordinates.
+     *
+     * @param {{x: number, y: number}} point Point in container coordinates.
+     * @return  {{x: number, y: number}}
+     */
+    this.toOriginalCoords = function(point) {
+        return { x: point.x, y: point.y }
+    };
+
+    /**
+     * Map point in the object coordinates to the point in container coordinates.
+     *
+     * @param {{x: number, y: number}} point Point in container coordinates.
+     * @return  {{x: number, y: number}}
+     */
+    this.toRealCoords = function(point) {
+        return { x: this.x() + point.x, y: this.y() + point.y }
+    };
+
+    /**
+     * @return {jQuery} Return object node. this is needed to add event handlers.
+     */
+    this.object = setter(jQuery.noop, function() { return this._getObject(); });
+
+    /**
+     * Change properties.
+     *
+     * @param {number} disp_w Display width;
+     * @param {number} disp_h Display height;
+     * @param {number} x
+     * @param {number} y
+     * @param {boolean} skip_animation If true, the animation will be skipped despite the
+     *     value set in constructor.
+     * @param {Function=} complete Call back will be fired when zoom will be complete.
+     */
+    this.setProps = function(disp_w, disp_h, x, y, skip_animation, complete) {
+        complete = complete || jQuery.noop;
+
+        this.display_width(disp_w);
+        this.display_height(disp_h);
+        this.x(x, true);
+        this.y(y, true);
+
+        var w = this._swapDimensions ? disp_h : disp_w;
+        var h = this._swapDimensions ? disp_w : disp_h;
+
+        var params = {
+            width: w,
+            height: h,
+            top: y - (this._swapDimensions ? this.display_diff() / 2 : 0) + "px",
+            left: x + (this._swapDimensions ? this.display_diff() / 2 : 0) + "px"
+        };
+
+        if (useIeTransforms) {
+            jQuery.extend(params, {
+                marginLeft: ieTransforms[this._angle].marginLeft * this.display_diff() / 2,
+                marginTop: ieTransforms[this._angle].marginTop * this.display_diff() / 2
+            });
+        }
+
+        var swapDims = this._swapDimensions, obj = this._getObject(), setCss = this._setCss;
+
+        //here we come: another IE oddness. If the object is rotated 90 degrees with a filter, than
+        //width and height getters return real width and height of rotated object. The bad news
+        //is that to set height you need to set a width and vice versa. Fuck IE.
+        //So, in this case we have to animate width and height manually.
+        if(useIeTransforms && swapDims) {
+            var ieh = obj.width(),
+                iew = obj.height(),
+                iedh = params.height - ieh;
+                iedw = params.width - iew;
+
+            delete params.width;
+            delete params.height;
+        }
+
+        if (this._do_anim && !skip_animation) {
+            obj.stop(true)
+                .animate(params, {
+                    duration: 200,
+                    complete: complete,
+                    step: function(now, fx) {
+                        if(useIeTransforms && swapDims && (fx.prop === 'top')) {
+                            var percent = (now - fx.start) / (fx.end - fx.start);
+                            obj.height(ieh + iedh * percent);
+                            obj.width(iew + iedw * percent);
+                            setCss({top: now})
+                        }
+                    }
+                });
+        } else {
+            setCss(params);
+            setTimeout(complete, 0); //both if branches should behave equally.
+        }
+    };
+
+}).apply($.ui.iviewer.CompatibleObject.prototype);
+
+/** @lends $.ui.iviewer.ImageObject.prototype */
+(function() {
+
+    /**
+     * Get the image object.
+     *
+     * @return {object}
+     */
+    this._getObject = function() {
+        return this._img;
     };
 
     /**
@@ -977,64 +1181,6 @@ $.ui.iviewer.CanvasObject = function(do_anim) {
         this.angle(0);
     };
 
-    this._dimension = function(prefix, name) {
-        var horiz = '_' + prefix + '_' + name,
-            vert = '_' + prefix + '_' + (name === 'height' ? 'width' : 'height');
-        return setter(function(val) {
-                this[this._swapDimensions ? horiz: vert] = val;
-            },
-            function() {
-                return this[this._swapDimensions ? horiz: vert];
-            });
-    };
-
-    /**
-     * Getters and setter for common image dimensions.
-     *    display_ means real image tag dimensions
-     *    orig_ means physical image dimensions.
-     *  Note, that dimensions are swapped if image is rotated. It necessary,
-     *  because as little as possible code should know about rotation.
-     */
-    this.display_width = this._dimension('display', 'width'),
-    this.display_height = this._dimension('display', 'height'),
-    this.display_diff = function() { return Math.floor( this.display_width() - this.display_height() ) };
-    this.orig_width = this._dimension('orig', 'width'),
-    this.orig_height = this._dimension('orig', 'height'),
-
-    /**
-     * Setter for  X coordinate. If image is rotated we need to additionaly shift an
-     *     image to map image coordinate to the visual position.
-     *
-     * @param {number} val Coordinate value.
-     * @param {boolean} skipCss If true, we only set the value and do not touch the dom.
-     */
-    this.x = setter(function(val, skipCss) { 
-            this._x = val;
-            if (!skipCss) {
-                this._img.css("left",this._x + (this._swapDimensions ? this.display_diff() / 2 : 0) + "px");
-            }
-        },
-        function() {
-            return this._x;
-        });
-
-    /**
-     * Setter for  Y coordinate. If image is rotated we need to additionaly shift an
-     *     image to map image coordinate to the visual position.
-     *
-     * @param {number} val Coordinate value.
-     * @param {boolean} skipCss If true, we only set the value and do not touch the dom.
-     */
-    this.y = setter(function(val, skipCss) {
-            this._y = val;
-            if (!skipCss) {
-                this._img.css("top",this._y - (this._swapDimensions ? this.display_diff() / 2 : 0) + "px");
-            }
-        },
-       function() {
-            return this._y;
-       });
-
     /**
      * Perform image rotation.
      *
@@ -1072,303 +1218,22 @@ $.ui.iviewer.CanvasObject = function(do_anim) {
         },
        function() { return this._angle; });
 
-    /**
-     * Map point in the container coordinates to the point in image coordinates.
-     *     You will get coordinates of point on image with respect to rotation,
-     *     but will be set as if image was not rotated.
-     *     So, if image was rotated 90 degrees, it's (0,0) point will be on the
-     *     top right corner.
-     *
-     * @param {{x: number, y: number}} point Point in container coordinates.
-     * @return  {{x: number, y: number}}
-     */
-    this.toOriginalCoords = function(point) {
-        switch (this.angle()) {
-            case 0: return { x: point.x, y: point.y }
-            case 90: return { x: point.y, y: this.display_width() - point.x }
-            case 180: return { x: this.display_width() - point.x, y: this.display_height() - point.y }
-            case 270: return { x: this.display_height() - point.y, y: point.x }
-        }
-    };
-
-    /**
-     * Map point in the image coordinates to the point in container coordinates.
-     *     You will get coordinates of point on container with respect to rotation.
-     *     Note, if image was rotated 90 degrees, it's (0,0) point will be on the
-     *     top right corner.
-     *
-     * @param {{x: number, y: number}} point Point in container coordinates.
-     * @return  {{x: number, y: number}}
-     */
-    this.toRealCoords = function(point) {
-        switch (this.angle()) {
-            case 0: return { x: this.x() + point.x, y: this.y() + point.y }
-            case 90: return { x: this.x() + this.display_width() - point.y, y: this.y() + point.x}
-            case 180: return { x: this.x() + this.display_width() - point.x, y: this.y() + this.display_height() - point.y}
-            case 270: return { x: this.x() + point.y, y: this.y() + this.display_height() - point.x}
-        }
-    };
-
-    /**
-     * @return {jQuery} Return image node. this is needed to add event handlers.
-     */
-    this.object = setter(jQuery.noop,
-                           function() { return this._img; });
-
-    /**
-     * Change image properties.
-     *
-     * @param {number} disp_w Display width;
-     * @param {number} disp_h Display height;
-     * @param {number} x
-     * @param {number} y
-     * @param {boolean} skip_animation If true, the animation will be skiped despite the
-     *     value set in constructor.
-     * @param {Function=} complete Call back will be fired when zoom will be complete.
-     */
-    this.setProps = function(disp_w, disp_h, x, y, skip_animation, complete) {
-        complete = complete || jQuery.noop;
-
-        this.display_width(disp_w);
-        this.display_height(disp_h);
-        this.x(x, true);
-        this.y(y, true);
-
-        var w = this._swapDimensions ? disp_h : disp_w;
-        var h = this._swapDimensions ? disp_w : disp_h;
-
-        var params = {
-            width: w,
-            height: h,
-            top: y - (this._swapDimensions ? this.display_diff() / 2 : 0) + "px",
-            left: x + (this._swapDimensions ? this.display_diff() / 2 : 0) + "px" 
-        };
-
-        if (useIeTransforms) {
-            jQuery.extend(params, {
-                marginLeft: ieTransforms[this.angle()].marginLeft * this.display_diff() / 2,
-                marginTop: ieTransforms[this.angle()].marginTop * this.display_diff() / 2
-            });
-        }
-
-        var swapDims = this._swapDimensions,
-            img = this._img;
-
-        //here we come: another IE oddness. If image is rotated 90 degrees with a filter, than
-        //width and height getters return real width and height of rotated image. The bad news
-        //is that to set height you need to set a width and vice versa. Fuck IE.
-        //So, in this case we have to animate width and height manually.
-        if(useIeTransforms && swapDims) {
-            var ieh = this._img.width(),
-                iew = this._img.height(),
-                iedh = params.height - ieh;
-                iedw = params.width - iew;
-
-            delete params.width;
-            delete params.height;
-        }
-
-        if (this._do_anim && !skip_animation) {
-            this._img.stop(true)
-                .animate(params, {
-                    duration: 200, 
-                    complete: complete,
-                    step: function(now, fx) {
-                        if(useIeTransforms && swapDims && (fx.prop === 'top')) {
-                            var percent = (now - fx.start) / (fx.end - fx.start);
-
-                            img.height(ieh + iedh * percent);
-                            img.width(iew + iedw * percent);
-                            img.css('top', now);
-                        }
-                    }
-                });
-        } else {
-            this._img.css(params);
-            setTimeout(complete, 0); //both if branches should behave equally.
-        }
-    };
-
-}).apply($.ui.iviewer.ImageObject.prototype);
+}).apply($.ui.iviewer.ImageObject.prototype = new $.ui.iviewer.CompatibleObject);
 
 
 /** @lends $.ui.iviewer.CanvasObject.prototype */
 (function() {
-    /**
-     * Restore initial object state.
-     *
-     * @param {number} w Canvas width.
-     * @param {number} h Canvas height.
-     */
-    this._reset = function(w, h) {
-        this._swapDimensions = false;
-        this.x(0);
-        this.y(0);
 
-        this.orig_width(w);
-        this.orig_height(h);
-        this.display_width(w);
-        this.display_height(h);
-    };
-	
-    this._dimension = function(prefix, name) {
-        var horiz = '_' + prefix + '_' + name,
-            vert = '_' + prefix + '_' + (name === 'height' ? 'width' : 'height');
-        return setter(function(val) {
-                this[this._swapDimensions ? horiz: vert] = val;
-            },
-            function() {
-                return this[this._swapDimensions ? horiz: vert];
-            });
+    /**
+     * Get the canvas object.
+     *
+     * @return {object}
+     */
+    this._getObject = function() {
+        return this._canvas;
     };
 
-    /**
-     * Getters and setter for common canvas dimensions.
-     *    display_ means real canvas tag dimensions
-     *    orig_ means physical canvas dimensions.
-     *  Note, that dimensions are swapped if canvas is rotated. It necessary,
-     *  because as little as possible code should know about rotation.
-     */
-    this.display_width = this._dimension('display', 'width'),
-    this.display_height = this._dimension('display', 'height'),
-    this.display_diff = function() { return Math.floor( this.display_width() - this.display_height() ) };
-    this.orig_width = this._dimension('orig', 'width'),
-    this.orig_height = this._dimension('orig', 'height'),
-
-    /**
-     * Setter for  X coordinate. If canvas is rotated we need to additionaly shift an
-     *     canvas to map canvas coordinate to the visual position.
-     *
-     * @param {number} val Coordinate value.
-     * @param {boolean} skipCss If true, we only set the value and do not touch the dom.
-     */
-    this.x = setter(function(val, skipCss) { 
-            this._x = val;
-            if (!skipCss) {
-                this._canvas.css("left",this._x + (this._swapDimensions ? this.display_diff() / 2 : 0) + "px");
-            }
-        },
-        function() {
-            return this._x;
-        });
-
-    /**
-     * Setter for  Y coordinate. If canvas is rotated we need to additionaly shift an
-     *     canvas to map canvas coordinate to the visual position.
-     *
-     * @param {number} val Coordinate value.
-     * @param {boolean} skipCss If true, we only set the value and do not touch the dom.
-     */
-    this.y = setter(function(val, skipCss) {
-            this._y = val;
-            if (!skipCss) {
-                this._canvas.css("top",this._y - (this._swapDimensions ? this.display_diff() / 2 : 0) + "px");
-            }
-        },
-       function() {
-            return this._y;
-       });
-	   
-    /**
-     * Map point in the container coordinates to the point in canvas coordinates.
-     *
-     * @param {{x: number, y: number}} point Point in container coordinates.
-     * @return  {{x: number, y: number}}
-     */
-    this.toOriginalCoords = function(point) {
-        return { x: point.x, y: point.y }
-    };
-
-    /**
-     * Map point in the canvas coordinates to the point in container coordinates.
-     *
-     * @param {{x: number, y: number}} point Point in container coordinates.
-     * @return  {{x: number, y: number}}
-     */
-    this.toRealCoords = function(point) {
-        return { x: this.x() + point.x, y: this.y() + point.y }
-    };
-
-    /**
-     * @return {jQuery} Return canvas node. this is needed to add event handlers.
-     */
-    this.object = setter(jQuery.noop,
-                           function() { return this._canvas; });
-
-    /**
-     * Change properties.
-     *
-     * @param {number} disp_w Display width;
-     * @param {number} disp_h Display height;
-     * @param {number} x
-     * @param {number} y
-     * @param {boolean} skip_animation If true, the animation will be skiped despite the
-     *     value set in constructor.
-     * @param {Function=} complete Call back will be fired when zoom will be complete.
-     */
-    this.setProps = function(disp_w, disp_h, x, y, skip_animation, complete) {
-        complete = complete || jQuery.noop;
-
-        this.display_width(disp_w);
-        this.display_height(disp_h);
-        this.x(x, true);
-        this.y(y, true);
-
-        var w = this._swapDimensions ? disp_h : disp_w;
-        var h = this._swapDimensions ? disp_w : disp_h;
-
-        var params = {
-            width: w,
-            height: h,
-            top: y - (this._swapDimensions ? this.display_diff() / 2 : 0) + "px",
-            left: x + (this._swapDimensions ? this.display_diff() / 2 : 0) + "px" 
-        };
-
-        if (useIeTransforms) {
-            jQuery.extend(params, {
-                marginLeft: ieTransforms[0].marginLeft * this.display_diff() / 2,
-                marginTop: ieTransforms[0].marginTop * this.display_diff() / 2
-            });
-        }
-
-        var swapDims = this._swapDimensions, canvas = this._canvas;
-
-        //here we come: another IE oddness. If canvas is rotated 90 degrees with a filter, than
-        //width and height getters return real width and height of rotated canvas. The bad news
-        //is that to set height you need to set a width and vice versa. Fuck IE.
-        //So, in this case we have to animate width and height manually.
-        if(useIeTransforms && swapDims) {
-            var ieh = this._canvas.width(),
-                iew = this._canvas.height(),
-                iedh = params.height - ieh;
-                iedw = params.width - iew;
-
-            delete params.width;
-            delete params.height;
-        }
-
-        if (this._do_anim && !skip_animation) {
-            this._canvas.stop(true)
-                .animate(params, {
-                    duration: 200, 
-                    complete: complete,
-                    step: function(now, fx) {
-                        if(useIeTransforms && swapDims && (fx.prop === 'top')) {
-                            var percent = (now - fx.start) / (fx.end - fx.start);
-
-                            canvas.height(ieh + iedh * percent);
-                            canvas.width(iew + iedw * percent);
-                            canvas.css('top', now);
-                        }
-                    }
-                });
-        } else {
-            this._canvas.css(params);
-            setTimeout(complete, 0); //both if branches should behave equally.
-        }
-    };
-
-}).apply($.ui.iviewer.CanvasObject.prototype);
+}).apply($.ui.iviewer.CanvasObject.prototype = new $.ui.iviewer.CompatibleObject);
 
 var util = {
     scaleValue: function(value, toZoom)
