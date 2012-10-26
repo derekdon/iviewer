@@ -1,3 +1,5 @@
+.idea
+*.iml
 *.swp
 logs
 public/photos

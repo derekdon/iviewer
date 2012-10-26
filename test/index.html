@@ -9,33 +9,54 @@
         <script type="text/javascript" src="../jquery.iviewer.js" ></script>
         <script type="text/javascript">
             var $ = jQuery;
-            $(document).ready(function(){
-                  var iv1 = $("#viewer").iviewer({
-                       src: "test_image.jpg", 
-                       update_on_resize: false,
-                       zoom_animation: false,
-                       mousewheel: false,
-                       onMouseMove: function(ev, coords) { },
-                       onStartDrag: function(ev, coords) { return false; }, //this image will not be dragged
-                       onDrag: function(ev, coords) { }
-                  });
+			$(document).ready(function(){
+				var ivCanvas = $("#ivCanvas").iviewer(
+				{
+					zoom: 100,
+					isCanvas: true
+				});
+			
+				$("#in").click(function(){ ivCanvas.iviewer('zoom_by', 1); });
+				$("#out").click(function(){ ivCanvas.iviewer('zoom_by', -1); });
+				$("#fit").click(function(){ ivCanvas.iviewer('fit'); });
+				$("#orig").click(function(){ ivCanvas.iviewer('set_zoom', 100); });
+				$("#update").click(function(){ ivCanvas.iviewer('update_container_info'); });
+				$("#moveto").click(function(){ ivCanvas.iviewer('moveTo', 300, 300, false, true); });
+				$("#zoomMove").click(function(){ ivCanvas.iviewer('set_zoom', 500, false, {x:300, y:300}); });
+			
+			
+				var ivImage1 = $("#ivImage1").iviewer({
+					src: "test_image.jpg",
+					update_on_resize: false,
+					zoom_animation: false,
+					mousewheel: false,
+					onMouseMove: function(ev, coords) { },
+					onStartDrag: function(ev, coords) { return false; }, //this image will not be dragged
+					onDrag: function(ev, coords) { }
+				});
 
-                   $("#in").click(function(){ iv1.iviewer('zoom_by', 1); }); 
-                   $("#out").click(function(){ iv1.iviewer('zoom_by', -1); }); 
-                   $("#fit").click(function(){ iv1.iviewer('fit'); }); 
-                   $("#orig").click(function(){ iv1.iviewer('set_zoom', 100); }); 
-                   $("#update").click(function(){ iv1.iviewer('update_container_info'); });
+				var ivImage2 = $("#ivImage2").iviewer(
+				{
+					src: "test_image2.jpg"
+				});
 
-                  var iv2 = $("#viewer2").iviewer(
-                  {
-                      src: "test_image2.jpg"
-                  });
+				$("#chimg").click(function()
+				{
+					ivImage2.iviewer('loadImage', "test_image.jpg");
+					return false;
+				});
 
-                  $("#chimg").click(function()
-                  {
-                    iv2.iviewer('loadImage', "test_image.jpg");
-                    return false;
-                  });
+				// Testing only, make this clean or redundant
+				var canvas = $("#ivCanvas").children("canvas");
+				canvas.width(600);
+				canvas.height(300);
+
+				if (canvas[0].getContext){
+					var ctx = canvas[0].getContext('2d');
+					ctx.fillRect(75,75,80,80);
+					ctx.clearRect(95,95,40,40);
+					ctx.strokeRect(100,100,30,30);
+				}
             });
         </script>
         <link rel="stylesheet" href="../jquery.iviewer.css" />
@@ -58,16 +79,20 @@
         <h1>JQuery.iviewer test</h1>
         <!-- wrapper div is needed for opera because it shows scroll bars for reason -->
         <div class="wrapper">
-            <span>
+			<span>
                 <a id="in" href="#">+</a>
                 <a id="out" href="#">-</a>
                 <a id="fit" href="#">fit</a>
                 <a id="orig" href="#">orig</a>
                 <a id="update" href="#">update</a>
+                <a id="moveto" href="#">MoveTo Test</a>
+                <a id="zoomMove" href="#">Set Zoom &amp; Move Test</a>
             </span>
-            <div id="viewer" class="viewer"></div>
+			<div id="ivCanvas" class="viewer" width="600" height="300"></div>
+			<br />
+            <div id="ivImage1" class="viewer"></div>
             <br />
-            <div id="viewer2" class="viewer"></div>
+            <div id="ivImage2" class="viewer"></div>
             <br />
             <p><a href="#" id="chimg">Change Image</a></p>
         </div>

@@ -126,12 +126,12 @@ $.widget( "ui.iviewer", $.ui.mouse, {
     widgetEventPrefix: "iviewer",
     options : {
         /**
-        * start zoom value for image, not used now
-        * may be equal to "fit" to fit image into container or scale in %
+        * start zoom value for element, not used now
+        * may be equal to "fit" to fit element into container or scale in %
         **/
         zoom: "fit",
         /**
-        * base value to scale image
+        * base value to scale element
         **/
         zoom_base: 100,
         /**
@@ -171,49 +171,53 @@ $.widget( "ui.iviewer", $.ui.mouse, {
         **/
         onZoom: jQuery.noop,
         /**
-        * event is triggered when zoom value is changed after image is set to the new dimensions
+        * event is triggered when zoom value is changed after element is set to the new dimensions
         * @param int new zoom value
         * @return boolean if false zoom action is aborted
         **/
         onAfterZoom: jQuery.noop,
         /**
         * event is fired on drag begin
-        * @param object coords mouse coordinates on the image
+        * @param object coords mouse coordinates on the element
         * @return boolean if false is returned, drag action is aborted
         **/
         onStartDrag: jQuery.noop,
         /**
         * event is fired on drag action
-        * @param object coords mouse coordinates on the image
+        * @param object coords mouse coordinates on the element
         **/
         onDrag: jQuery.noop,
         /**
         * event is fired on drag stop
-        * @param object coords mouse coordinates on the image
+        * @param object coords mouse coordinates on the element
         **/
         onStopDrag: jQuery.noop,
         /**
-        * event is fired when mouse moves over image
-        * @param object coords mouse coordinates on the image
+        * event is fired when mouse moves over element
+        * @param object coords mouse coordinates on the element
         **/
         onMouseMove: jQuery.noop,
         /**
         * mouse click event
-        * @param object coords mouse coordinates on the image
+        * @param object coords mouse coordinates on the element
         **/
         onClick: jQuery.noop,
         /**
-        * event is fired when image starts to load
+        * event is fired when an image element starts to load
         */
         onStartLoad: null,
         /**
-        * event is fired, when image is loaded and initially positioned
+        * event is fired, when an image element is loaded and initially positioned
         */
         onFinishLoad: null,
         /**
-        * event is fired when image load error occurs
+        * event is fired when an image element load error occurs
         */
-        onErrorLoad: null
+        onErrorLoad: null,
+		
+		onAfterMove: jQuery.noop,
+
+		isCanvas: false
 	},
 
     _create: function() {
@@ -228,7 +232,14 @@ $.widget( "ui.iviewer", $.ui.mouse, {
         *   @img_object.orig_{width|height} - original dimensions
         *   @img_object.display_{width|height} - actual dimensions
         */
-        this.img_object = {};
+        this.img_object = new $.ui.iviewer.ImageObject(this.options.zoom_animation);
+		
+		/* object containing actual information about canvas
+        *   @canvas_object.object - jquery canvas object
+        *   @canvas_object.orig_{width|height} - original dimensions
+        *   @canvas_object.display_{width|height} - actual dimensions
+        */
+        this.canvas_object = new $.ui.iviewer.CanvasObject(this.options.zoom_animation);
 
         this.zoom_object = {}; //object to show zoom status
 
@@ -254,11 +265,11 @@ $.widget( "ui.iviewer", $.ui.mouse, {
                 me._updateContainerInfo();
             });
         }
-
-        this.img_object = new $.ui.iviewer.ImageObject(this.options.zoom_animation);
-
+		
+        this.element_object = this.options.isCanvas ? this.canvas_object : this.img_object;
+		
         if (this.options.mousewheel) {
-            this.img_object.object()
+            this.element_object.object()
                 .mousewheel(function(ev, delta)
                 {
                     //this event is there instead of containing div, because
@@ -277,7 +288,7 @@ $.widget( "ui.iviewer", $.ui.mouse, {
             if (gesturesSupport) {
                 var gestureThrottle = +new Date();
                 var originalScale, originalCenter;
-                this.img_object.object()
+                this.element_object.object()
                     // .bind('gesturestart', function(ev) {
                     .bind('touchstart', function(ev) {
                         originalScale = me.current_zoom;
@@ -307,15 +318,22 @@ $.widget( "ui.iviewer", $.ui.mouse, {
         }
 
         //init object
-        this.img_object.object()
+        this.element_object.object()
             //bind mouse events
             .click(function(e){return me._click(e)})
                 .prependTo(this.container);
 
         this.container.bind('mousemove', function(ev) { me._handleMouseMove(ev); });
 
-        this.loadImage(this.options.src);
-
+		if(this.element_object._img)
+		{
+			this.loadImage(this.options.src);
+		}
+		else
+		{
+			this._imageLoaded(); // Using canvas, trigger imageLoaded logic
+		}
+		
         if(!this.options.ui_disabled)
         {
             this.createui();
@@ -327,7 +345,7 @@ $.widget( "ui.iviewer", $.ui.mouse, {
     destroy: function() {
         $.Widget.prototype.destroy.call( this );
         this._mouseDestroy();
-        this.img_object.object().remove();
+        this.element_object.object().remove();
     },
 
     _updateContainerInfo: function()
@@ -362,38 +380,39 @@ $.widget( "ui.iviewer", $.ui.mouse, {
             this.set_zoom(this.options.zoom, true);
         }
 
-        this._trigger('onFinishLoad', 0, src);
+		if(src)
+			this._trigger('onFinishLoad', 0, src);
     },
 
     /**
-    * fits image in the container
+    * fits element in the container
     *
     * @param {boolean} skip_animation
     **/
     fit: function(skip_animation)
     {
-        var aspect_ratio = this.img_object.orig_width() / this.img_object.orig_height();
+        var aspect_ratio = this.element_object.orig_width() / this.element_object.orig_height();
         var window_ratio = this.options.width /  this.options.height;
         var choose_left = (aspect_ratio > window_ratio);
         var new_zoom = 0;
 
         if(choose_left){
-            new_zoom = this.options.width / this.img_object.orig_width() * 100;
+            new_zoom = this.options.width / this.element_object.orig_width() * 100;
         }
         else {
-            new_zoom = this.options.height / this.img_object.orig_height() * 100;
+            new_zoom = this.options.height / this.element_object.orig_height() * 100;
         }
 
       this.set_zoom(new_zoom, skip_animation);
     },
 
     /**
-    * center image in container
+    * center element in container
     **/
     center: function()
     {
-        this.setCoords(-Math.round((this.img_object.display_width() - this.options.width)/2),
-                -Math.round((this.img_object.display_height() - this.options.height)/2));
+        this.setCoords(-Math.round((this.element_object.display_width() - this.options.width)/2),
+                -Math.round((this.element_object.display_height() - this.options.height)/2));
     },
 
     /**
@@ -401,15 +420,44 @@ $.widget( "ui.iviewer", $.ui.mouse, {
     *   @param x a point in container
     *   @param y a point in container
     **/
-    moveTo: function(x, y)
+    moveTo: function(x, y, skip_animation, resetFirst)
     {
+		var elObj = this.element_object;
+		
+		// Reset 
+		if(resetFirst)
+		{
+			elObj._reset(elObj.orig_width(), elObj.orig_height());
+			this.current_zoom = this.options.zoom;
+		}
+		
         var dx = x-Math.round(this.options.width/2);
         var dy = y-Math.round(this.options.height/2);
 
-        var new_x = this.img_object.x() - dx;
-        var new_y = this.img_object.y() - dy;
+        var new_x = elObj.x() - dx;
+        var new_y = elObj.y() - dy;
+		
+		var dis_width = elObj.display_width();
+		var dis_height = elObj.display_height();
+		
+		var self = this;
 
-        this.setCoords(new_x, new_y);
+		if(skip_animation)
+		{
+			this.setCoords(new_x, new_y);
+			self._trigger('onAfterMove', 0, {x:new_x, y:new_y} );
+		}
+		else
+		{
+			// Testing...
+			
+			// elObj.setProps(dis_width, dis_height, new_x, new_y,
+											// false, function() {
+				// self._trigger('onAfterMove', 0, {x:new_x, y:new_y} );
+			// });
+			
+			this.set_zoom(400, {x:x, y:y}); // Using raw values
+		}
     },
 
     /**
@@ -420,16 +468,16 @@ $.widget( "ui.iviewer", $.ui.mouse, {
     },
 
     /**
-    * set coordinates of upper left corner of image object
+    * set coordinates of upper left corner of element object
     **/
     setCoords: function(x,y)
     {
-        //do nothing while image is being loaded
-        if(!this.img_object.loaded()) { return; }
+        //do nothing while image elements are being loaded
+        if(this.element_object._img && !this.element_object.loaded()) { return; }
 
         var coords = this._correctCoords(x,y);
-        this.img_object.x(coords.x);
-        this.img_object.y(coords.y);
+        this.element_object.x(coords.x);
+        this.element_object.y(coords.y);
     },
 
     _correctCoords: function( x, y )
@@ -444,17 +492,17 @@ $.widget( "ui.iviewer", $.ui.mouse, {
         if(x > 0){
             x = 0;
         }
-        if(y + this.img_object.display_height() < this.options.height){
-            y = this.options.height - this.img_object.display_height();
+        if(y + this.element_object.display_height() < this.options.height){
+            y = this.options.height - this.element_object.display_height();
         }
-        if(x + this.img_object.display_width() < this.options.width){
-            x = this.options.width - this.img_object.display_width();
+        if(x + this.element_object.display_width() < this.options.width){
+            x = this.options.width - this.element_object.display_width();
         }
-        if(this.img_object.display_width() <= this.options.width){
-            x = -(this.img_object.display_width() - this.options.width)/2;
+        if(this.element_object.display_width() <= this.options.width){
+            x = -(this.element_object.display_width() - this.options.width)/2;
         }
-        if(this.img_object.display_height() <= this.options.height){
-            y = -(this.img_object.display_height() - this.options.height)/2;
+        if(this.element_object.display_height() <= this.options.height){
+            y = -(this.element_object.display_height() - this.options.height)/2;
         }
 
         return { x: x, y:y };
@@ -462,18 +510,18 @@ $.widget( "ui.iviewer", $.ui.mouse, {
 
 
     /**
-    * convert coordinates on the container to the coordinates on the image (in original size)
+    * convert coordinates on the container to the coordinates on the element (in original size)
     *
     * @return object with fields x,y according to coordinates or false
-    * if initial coords are not inside image
+    * if initial coords are not inside the element
     **/
-    containerToImage : function (x,y)
+    containerToElement : function (x,y)
     {
-        var coords = { x : x - this.img_object.x(),
-                 y :  y - this.img_object.y()
+        var coords = { x : x - this.element_object.x(),
+                 y :  y - this.element_object.y()
         };
 
-        coords = this.img_object.toOriginalCoords(coords);
+        coords = this.element_object.toOriginalCoords(coords);
 
         return { x :  util.descaleValue(coords.x, this.current_zoom),
                  y :  util.descaleValue(coords.y, this.current_zoom)
@@ -481,41 +529,41 @@ $.widget( "ui.iviewer", $.ui.mouse, {
     },
 
     /**
-    * convert coordinates on the image (in original size, and zero angle) to the coordinates on the container
+    * convert coordinates on the element (in original size, and zero angle) to the coordinates on the container
     *
     * @return object with fields x,y according to coordinates
     **/
-    imageToContainer : function (x,y)
+    elementToContainer : function (x,y)
     {
         var coords = {
                 x : util.scaleValue(x, this.current_zoom),
                 y : util.scaleValue(y, this.current_zoom)
             };
 
-        return this.img_object.toRealCoords(coords);
+        return this.element_object.toRealCoords(coords);
     },
 
     /**
-    * get mouse coordinates on the image
+    * get mouse coordinates on the element
     * @param e - object containing pageX and pageY fields, e.g. mouse event object
     *
     * @return object with fields x,y according to coordinates or false
-    * if initial coords are not inside image
+    * if initial coords are not inside the element
     **/
     _getMouseCoords : function(e)
     {
         var containerOffset = this.container.offset();
-            coords = this.containerToImage(e.pageX - containerOffset.left, e.pageY - containerOffset.top);
+            coords = this.containerToElement(e.pageX - containerOffset.left, e.pageY - containerOffset.top);
 
         return coords;
     },
 
     /**
-    * set image scale to the new_zoom
+    * set element scale to the new_zoom
     *
-    * @param {number} new_zoom image scale in %
+    * @param {number} new_zoom element scale in %
     * @param {boolean} skip_animation
-    * @param {x: number, y: number} Coordinates of point the should not be moved on zoom. The default is the center of image.
+    * @param {x: number, y: number} Coordinates of point the should not be moved on zoom. The default is the center of element.
     **/
     set_zoom: function(new_zoom, skip_animation, zoom_center)
     {
@@ -523,8 +571,8 @@ $.widget( "ui.iviewer", $.ui.mouse, {
             return;
         }
 
-        //do nothing while image is being loaded
-        if(!this.img_object.loaded()) { return; }
+		//do nothing while image elements are being loaded
+        if(this.element_object._img && !this.element_object.loaded()) { return; }
 
         zoom_center = zoom_center || {
             x: Math.round(this.options.width/2),
@@ -543,17 +591,17 @@ $.widget( "ui.iviewer", $.ui.mouse, {
         /* we fake these values to make fit zoom properly work */
         if(this.current_zoom == "fit")
         {
-            var old_x = zoom_center.x + Math.round(this.img_object.orig_width()/2);
-            var old_y = zoom_center.y + Math.round(this.img_object.orig_height()/2);
+            var old_x = zoom_center.x + Math.round(this.element_object.orig_width()/2);
+            var old_y = zoom_center.y + Math.round(this.element_object.orig_height()/2);
             this.current_zoom = 100;
         }
         else {
-            var old_x = -this.img_object.x() + zoom_center.x;
-            var old_y = -this.img_object.y() + zoom_center.y
+            var old_x = -this.element_object.x() + zoom_center.x;
+            var old_y = -this.element_object.y() + zoom_center.y
         }
 
-        var new_width = util.scaleValue(this.img_object.orig_width(), new_zoom);
-        var new_height = util.scaleValue(this.img_object.orig_height(), new_zoom);
+        var new_width = util.scaleValue(this.element_object.orig_width(), new_zoom);
+        var new_height = util.scaleValue(this.element_object.orig_height(), new_zoom);
         var new_x = util.scaleValue( util.descaleValue(old_x, this.current_zoom), new_zoom);
         var new_y = util.scaleValue( util.descaleValue(old_y, this.current_zoom), new_zoom);
 
@@ -565,13 +613,13 @@ $.widget( "ui.iviewer", $.ui.mouse, {
         new_x = Math.floor(new_x);
         new_y = Math.floor(new_y);
 
-        this.img_object.display_width(new_width);
-        this.img_object.display_height(new_height);
+        this.element_object.display_width(new_width);
+        this.element_object.display_height(new_height);
 
         var coords = this._correctCoords( new_x, new_y ),
             self = this;
 
-        this.img_object.setImageProps(new_width, new_height, coords.x, coords.y,
+        this.element_object.setProps(new_width, new_height, coords.x, coords.y,
                                         skip_animation, function() {
             self._trigger('onAfterZoom', 0, new_zoom );
         });
@@ -606,7 +654,7 @@ $.widget( "ui.iviewer", $.ui.mouse, {
     },
 
     /**
-    * Rotate image
+    * Rotate images
     * @param {num} deg Degrees amount to rotate. Positive values rotate image clockwise.
     *     Currently 0, 90, 180, 270 and -90, -180, -270 values are supported
     *
@@ -617,12 +665,12 @@ $.widget( "ui.iviewer", $.ui.mouse, {
     angle: function(deg, abs) {
         if (arguments.length === 0) { return this.img_object.angle(); }
 
-        if (deg < -270 || deg > 270 || deg % 90 !== 0) { return; }
+        if (deg < -270 || deg > 270 || deg % 90 !== 0) { return null; }
         if (!abs) { deg += this.img_object.angle(); }
         if (deg < 0) { deg += 360; }
         if (deg >= 360) { deg -= 360; }
 
-        if (deg === this.img_object.angle()) { return; }
+        if (deg === this.img_object.angle()) { return null; }
 
         this.img_object.angle(deg);
         //the rotate behavior is different in all editors. For now we  just center the
@@ -666,8 +714,8 @@ $.widget( "ui.iviewer", $.ui.mouse, {
     {
         if(!this.options.ui_disabled)
         {
-            var percent = Math.round(100*this.img_object.display_height()/this.img_object.orig_height());
-            if(percent)
+            var percent = Math.round(100*this.element_object.display_height()/this.element_object.orig_height());
+            if(percent && this.zoom_object.html)
             {
                 this.zoom_object.html(percent + "%");
             }
@@ -675,45 +723,48 @@ $.widget( "ui.iviewer", $.ui.mouse, {
     },
 
     /**
-     * Get some information about the image.
+     * Get some information about the element.
      *     Currently orig_(width|height), display_(width|height), angle, zoom and src params are supported.
      *
      *  @param {string} parameter to check
      *  @param {boolean} withoutRotation if param is orig_width or orig_height and this flag is set to true,
-     *      method will return original image width without considering rotation.
+     *      method will return original element width without considering rotation.
      *
      */
     info: function(param, withoutRotation) {
         if (!param) { return; }
+		
+		if(!this.element_object._img)
+			withoutRotation = false;
 
         switch (param) {
             case 'orig_width':
             case 'orig_height':
                 if (withoutRotation) {
-                    return (this.img_object.angle() % 180 === 0 ? this.img_object[param]() :
-                            param === 'orig_width' ? this.img_object.orig_height() : 
-                                                        this.img_object.orig_width());
+                    return (this.element_object.angle() % 180 === 0 ? this.element_object[param]() :
+                            param === 'orig_width' ? this.element_object.orig_height() : 
+                                                        this.element_object.orig_width());
                 } else {
-                    return this.img_object[param]();
+                    return this.element_object[param]();
                 }
             case 'display_width':
             case 'display_height':
             case 'angle':
-                return this.img_object[param]();
+                return this.element_object[param]();
             case 'zoom':
                 return this.current_zoom;
             case 'src':
-                return this.img_object.object().attr('src');
+                return this.element_object.object().attr('src');
             case 'coords':
                 return {
-                    x: this.img_object.x(),
-                    y: this.img_object.y()
+                    x: this.element_object.x(),
+                    y: this.element_object.y()
                 };
         }
     },
 
     /**
-    *   callback for handling mousdown event to start dragging image
+    *   callback for handling mousdown event to start dragging the element
     **/
     _mouseStart: function( e )
     {
@@ -728,8 +779,8 @@ $.widget( "ui.iviewer", $.ui.mouse, {
         //#10: fix movement quirks for ipad
         this._dragInitialized = !(e.originalEvent.changedTouches && e.originalEvent.changedTouches.length==1);
 
-        this.dx = e.pageX - this.img_object.x();
-        this.dy = e.pageY - this.img_object.y();
+        this.dx = e.pageX - this.element_object.x();
+        this.dy = e.pageY - this.element_object.y();
         return true;
     },
 
@@ -747,7 +798,7 @@ $.widget( "ui.iviewer", $.ui.mouse, {
     },
 
     /**
-    *   callback for handling mousemove event to drag image
+    *   callback for handling mousemove event to drag the element
     **/
     _mouseDrag: function(e)
     {
@@ -755,8 +806,8 @@ $.widget( "ui.iviewer", $.ui.mouse, {
 
         //#10: imitate mouseStart, because we can get here without it on iPad for some reason
         if (!this._dragInitialized) {
-            this.dx = e.pageX - this.img_object.x();
-            this.dy = e.pageY - this.img_object.y();
+            this.dx = e.pageX - this.element_object.x();
+            this.dy = e.pageY - this.element_object.y();
             this._dragInitialized = true;
         }
 
@@ -806,16 +857,18 @@ $.widget( "ui.iviewer", $.ui.mouse, {
                     .bind('mousedown touchstart',function(){me.fit(this); return false;})
                     .appendTo(this.container);
 
-        this.zoom_object = $("<div>").addClass("iviewer_zoom_status iviewer_common")
-                                    .appendTo(this.container);
+		this.zoom_object = $("<div>").addClass("iviewer_zoom_status iviewer_common").appendTo(this.container);
+		
+		if(this.element_object._img)
+		{
+			$("<div>", { 'class': "iviewer_rotate_left iviewer_common iviewer_button"})
+						.bind('mousedown touchstart',function(){me.angle(-90); return false;})
+						.appendTo(this.container);
 
-        $("<div>", { 'class': "iviewer_rotate_left iviewer_common iviewer_button"})
-                    .bind('mousedown touchstart',function(){me.angle(-90); return false;})
-                    .appendTo(this.container);
-
-        $("<div>", { 'class': "iviewer_rotate_right iviewer_common iviewer_button" })
-                    .bind('mousedown touchstart',function(){me.angle(90); return false;})
-                    .appendTo(this.container);
+			$("<div>", { 'class': "iviewer_rotate_right iviewer_common iviewer_button" })
+						.bind('mousedown touchstart',function(){me.angle(90); return false;})
+						.appendTo(this.container);
+		}
 
         this.update_status(); //initial status update
     }
@@ -839,6 +892,24 @@ $.ui.iviewer.ImageObject = function(do_anim) {
     this.x(0, true);
     this.y(0, true);
     this.angle(0);
+};
+
+/**
+ * @class $.ui.iviewer.CanvasObject Class represents canvas and provides public api without
+ *     extending canvas prototype.
+ * @constructor
+ * @param {boolean} do_anim Do we want to animate canvas on dimension changes?
+ */
+$.ui.iviewer.CanvasObject = function(do_anim) {
+    this._canvas = $("<canvas>")
+            //this is needed, because chromium sets them auto otherwise
+            .css({ position: "absolute", top :"0px", left: "0px"});
+
+    this._swapDimensions = false;
+    this._do_anim = do_anim || false;
+    this.x(0, true);
+    this.y(0, true);
+	this._reset(600, 300);
 };
 
 
@@ -1055,7 +1126,7 @@ $.ui.iviewer.ImageObject = function(do_anim) {
      *     value set in constructor.
      * @param {Function=} complete Call back will be fired when zoom will be complete.
      */
-    this.setImageProps = function(disp_w, disp_h, x, y, skip_animation, complete) {
+    this.setProps = function(disp_w, disp_h, x, y, skip_animation, complete) {
         complete = complete || jQuery.noop;
 
         this.display_width(disp_w);
@@ -1121,6 +1192,183 @@ $.ui.iviewer.ImageObject = function(do_anim) {
 }).apply($.ui.iviewer.ImageObject.prototype);
 
 
+/** @lends $.ui.iviewer.CanvasObject.prototype */
+(function() {
+    /**
+     * Restore initial object state.
+     *
+     * @param {number} w Canvas width.
+     * @param {number} h Canvas height.
+     */
+    this._reset = function(w, h) {
+        this._swapDimensions = false;
+        this.x(0);
+        this.y(0);
+
+        this.orig_width(w);
+        this.orig_height(h);
+        this.display_width(w);
+        this.display_height(h);
+    };
+	
+    this._dimension = function(prefix, name) {
+        var horiz = '_' + prefix + '_' + name,
+            vert = '_' + prefix + '_' + (name === 'height' ? 'width' : 'height');
+        return setter(function(val) {
+                this[this._swapDimensions ? horiz: vert] = val;
+            },
+            function() {
+                return this[this._swapDimensions ? horiz: vert];
+            });
+    };
+
+    /**
+     * Getters and setter for common canvas dimensions.
+     *    display_ means real canvas tag dimensions
+     *    orig_ means physical canvas dimensions.
+     *  Note, that dimensions are swapped if canvas is rotated. It necessary,
+     *  because as little as possible code should know about rotation.
+     */
+    this.display_width = this._dimension('display', 'width'),
+    this.display_height = this._dimension('display', 'height'),
+    this.display_diff = function() { return Math.floor( this.display_width() - this.display_height() ) };
+    this.orig_width = this._dimension('orig', 'width'),
+    this.orig_height = this._dimension('orig', 'height'),
+
+    /**
+     * Setter for  X coordinate. If canvas is rotated we need to additionaly shift an
+     *     canvas to map canvas coordinate to the visual position.
+     *
+     * @param {number} val Coordinate value.
+     * @param {boolean} skipCss If true, we only set the value and do not touch the dom.
+     */
+    this.x = setter(function(val, skipCss) { 
+            this._x = val;
+            if (!skipCss) {
+                this._canvas.css("left",this._x + (this._swapDimensions ? this.display_diff() / 2 : 0) + "px");
+            }
+        },
+        function() {
+            return this._x;
+        });
+
+    /**
+     * Setter for  Y coordinate. If canvas is rotated we need to additionaly shift an
+     *     canvas to map canvas coordinate to the visual position.
+     *
+     * @param {number} val Coordinate value.
+     * @param {boolean} skipCss If true, we only set the value and do not touch the dom.
+     */
+    this.y = setter(function(val, skipCss) {
+            this._y = val;
+            if (!skipCss) {
+                this._canvas.css("top",this._y - (this._swapDimensions ? this.display_diff() / 2 : 0) + "px");
+            }
+        },
+       function() {
+            return this._y;
+       });
+	   
+    /**
+     * Map point in the container coordinates to the point in canvas coordinates.
+     *
+     * @param {{x: number, y: number}} point Point in container coordinates.
+     * @return  {{x: number, y: number}}
+     */
+    this.toOriginalCoords = function(point) {
+        return { x: point.x, y: point.y }
+    };
+
+    /**
+     * Map point in the canvas coordinates to the point in container coordinates.
+     *
+     * @param {{x: number, y: number}} point Point in container coordinates.
+     * @return  {{x: number, y: number}}
+     */
+    this.toRealCoords = function(point) {
+        return { x: this.x() + point.x, y: this.y() + point.y }
+    };
+
+    /**
+     * @return {jQuery} Return canvas node. this is needed to add event handlers.
+     */
+    this.object = setter(jQuery.noop,
+                           function() { return this._canvas; });
+
+    /**
+     * Change properties.
+     *
+     * @param {number} disp_w Display width;
+     * @param {number} disp_h Display height;
+     * @param {number} x
+     * @param {number} y
+     * @param {boolean} skip_animation If true, the animation will be skiped despite the
+     *     value set in constructor.
+     * @param {Function=} complete Call back will be fired when zoom will be complete.
+     */
+    this.setProps = function(disp_w, disp_h, x, y, skip_animation, complete) {
+        complete = complete || jQuery.noop;
+
+        this.display_width(disp_w);
+        this.display_height(disp_h);
+        this.x(x, true);
+        this.y(y, true);
+
+        var w = this._swapDimensions ? disp_h : disp_w;
+        var h = this._swapDimensions ? disp_w : disp_h;
+
+        var params = {
+            width: w,
+            height: h,
+            top: y - (this._swapDimensions ? this.display_diff() / 2 : 0) + "px",
+            left: x + (this._swapDimensions ? this.display_diff() / 2 : 0) + "px" 
+        };
+
+        if (useIeTransforms) {
+            jQuery.extend(params, {
+                marginLeft: ieTransforms[0].marginLeft * this.display_diff() / 2,
+                marginTop: ieTransforms[0].marginTop * this.display_diff() / 2
+            });
+        }
+
+        var swapDims = this._swapDimensions, canvas = this._canvas;
+
+        //here we come: another IE oddness. If canvas is rotated 90 degrees with a filter, than
+        //width and height getters return real width and height of rotated canvas. The bad news
+        //is that to set height you need to set a width and vice versa. Fuck IE.
+        //So, in this case we have to animate width and height manually.
+        if(useIeTransforms && swapDims) {
+            var ieh = this._canvas.width(),
+                iew = this._canvas.height(),
+                iedh = params.height - ieh;
+                iedw = params.width - iew;
+
+            delete params.width;
+            delete params.height;
+        }
+
+        if (this._do_anim && !skip_animation) {
+            this._canvas.stop(true)
+                .animate(params, {
+                    duration: 200, 
+                    complete: complete,
+                    step: function(now, fx) {
+                        if(useIeTransforms && swapDims && (fx.prop === 'top')) {
+                            var percent = (now - fx.start) / (fx.end - fx.start);
+
+                            canvas.height(ieh + iedh * percent);
+                            canvas.width(iew + iedw * percent);
+                            canvas.css('top', now);
+                        }
+                    }
+                });
+        } else {
+            this._canvas.css(params);
+            setTimeout(complete, 0); //both if branches should behave equally.
+        }
+    };
+
+}).apply($.ui.iviewer.CanvasObject.prototype);
 
 var util = {
     scaleValue: function(value, toZoom)
