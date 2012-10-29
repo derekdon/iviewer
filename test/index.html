@@ -30,16 +30,19 @@
                     fill: 'blue'
                 });
 
-                var cir = new fabric.Circle({
-                    top: 420,
-                    left: 520,
-                    radius: 100,
-                    fill: 'green'
-                });
+				var rect3 = new fabric.Rect({
+					top: 420,
+					left: 520,
+					width: 500,
+					height: 200,
+					fill: 'green',
+					stroke: 'blue',
+					strokeWidth: 3
+				});
 
                 canvas.add(rect);
                 canvas.add(rect2);
-                canvas.add(cir);
+                canvas.add(rect3);
 
                 var updateCoords = function(ev, point)
                 {
@@ -49,7 +52,12 @@
                     }
 
                     canvas.renderAll();
-                }
+                };
+
+				var onMouseMove = function(ev, coords)
+				{
+					$('#status').html('You are in (' + coords.x.toFixed(1) + ', ' + coords.y.toFixed(1) + ').');
+				};
 
 				var ivCanvas = $("#ivCanvas").iviewer(
 				{
@@ -58,7 +66,8 @@
 					isCanvas: true,
                     onStopDrag: updateCoords,
                     onAfterZoom: updateCoords,
-                    onAfterMove: updateCoords
+                    onAfterMove: updateCoords,
+					onMouseMove: onMouseMove
 				});
 			
 				$("#in").click(function(){ ivCanvas.iviewer('zoom_by', 1); });
@@ -66,9 +75,10 @@
 				$("#fit").click(function(){ ivCanvas.iviewer('fit'); });
 				$("#orig").click(function(){ ivCanvas.iviewer('set_zoom', 100); });
 				$("#update").click(function(){ ivCanvas.iviewer('update_container_info'); });
-				$("#moveto").click(function(){ ivCanvas.iviewer('moveTo', 300, 300, false, true); });
-				$("#zoomMove").click(function(){ ivCanvas.iviewer('set_zoom', 500, false, {x:300, y:300}); });
-			
+				$("#moveto").click(function(){ ivCanvas.iviewer('moveTo', 500, 500); });
+				$("#zoomArea").click(function(){ ivCanvas.iviewer('zoomArea', 220, 220, 200); });
+				$("#zoomFitArea").click(function(){ ivCanvas.iviewer('fitArea', 520, 420, 500, 200); });
+
 			
 				var ivImage1 = $("#ivImage1").iviewer({
 					src: "test_image.jpg",
@@ -124,7 +134,9 @@
                 <a id="orig" href="#">orig</a>
                 <a id="update" href="#">update</a>
                 <a id="moveto" href="#">MoveTo Test</a>
-                <a id="zoomMove" href="#">Set Zoom &amp; Move Test</a>
+                <a id="zoomArea" href="#">Zoom Area Test</a>
+                <a id="zoomFitArea" href="#">Zoom Fit Area Test</a>
+				<span id="status"></span>
             </span>
 			<div id="ivCanvas" class="viewer">
 				<!-- Upper Canvas -->

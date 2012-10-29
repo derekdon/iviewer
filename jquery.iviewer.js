@@ -419,6 +419,39 @@ $.widget( "ui.iviewer", $.ui.mouse, {
     },
 
     /**
+    * fit an area of the element in the container
+    * @param {number} centerX Area center x
+    * @param {number} centerY Area center y
+    * @param {number} width Area width
+    * @param {number} height Area height
+    * @param {boolean} skip_animation
+    **/
+    fitArea: function(centerX, centerY, width, height, skip_animation)
+    {
+        var elObj = this.element_object;
+        var elOrigWidth = elObj.orig_width();
+        var elOrigHeight = elObj.orig_height();
+        var x = centerX;
+        var y = centerY;
+
+        // Reset
+        elObj._reset(elOrigWidth, elOrigHeight);
+        this.current_zoom = this.options.zoom;
+
+        var aspect_ratio = width / height;
+        var window_ratio = this.options.width /  this.options.height;
+        var choose_left = (aspect_ratio > window_ratio);
+        var new_zoom = 0;
+
+        if(choose_left)
+            new_zoom = this.options.width / width * 100;
+        else
+            new_zoom = this.options.height / height * 100;
+
+        this.set_zoom(new_zoom, skip_animation, {x:x, y:y});
+    },
+
+    /**
     * center element in container
     **/
     center: function()
@@ -428,48 +461,41 @@ $.widget( "ui.iviewer", $.ui.mouse, {
     },
 
     /**
-    *   move a point in container to the center of display area
-    *   @param x a point in container
-    *   @param y a point in container
+    * move a point in container to the center of display area
+    * @param x a point in container
+    * @param y a point in container
     **/
-    moveTo: function(x, y, skip_animation, resetFirst)
+    moveTo: function(x, y)
     {
-		var elObj = this.element_object;
-		
-		// Reset 
-		if(resetFirst)
-		{
-			elObj._reset(elObj.orig_width(), elObj.orig_height());
-			this.current_zoom = this.options.zoom;
-		}
-		
         var dx = x-Math.round(this.options.width/2);
         var dy = y-Math.round(this.options.height/2);
 
-        var new_x = elObj.x() - dx;
-        var new_y = elObj.y() - dy;
-		
-		var dis_width = elObj.display_width();
-		var dis_height = elObj.display_height();
-		
-		var self = this;
+        var new_x = this.element_object.x() - dx;
+        var new_y = this.element_object.y() - dy;
 
-		if(skip_animation)
-		{
-			this.setCoords(new_x, new_y);
-			self._trigger('onAfterMove', 0, {x:new_x, y:new_y} );
-		}
-		else
-		{
-			// Testing...
-			
-			// elObj.setProps(dis_width, dis_height, new_x, new_y,
-											// false, function() {
-				// self._trigger('onAfterMove', 0, {x:new_x, y:new_y} );
-			// });
-			
-			this.set_zoom(400, {x:x, y:y}); // Using raw values
-		}
+        this.setCoords(new_x, new_y);
+    },
+
+    /**
+    * zoom an area of the element
+    * @param {number} x A point in container
+    * @param {number} y A point in container
+    * @param {number} zoom Element scale in %
+    * @param {boolean} skip_animation
+    **/
+    zoomArea: function(x, y, zoom, skip_animation)
+    {
+        var elObj = this.element_object;
+
+        // Reset
+        elObj._reset(elObj.orig_width(), elObj.orig_height());
+        this.current_zoom = this.options.zoom;
+
+        // Get center from x and y point
+        x = x + (elObj.orig_width() / 2);
+        y = y + (elObj.orig_height() / 2);
+
+        this.set_zoom(zoom, skip_animation, {x:x, y:y});
     },
 
     /**
