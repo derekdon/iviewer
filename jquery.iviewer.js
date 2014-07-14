@@ -120,7 +120,21 @@ var ieTransforms = {
             filter: 'progid:DXImageTransform.Microsoft.Matrix(M11=0, M12=1, M21=-1, M22=0, SizingMethod="auto expand")'
         }
     },
-    useIeTransforms = (jQuery.browser.msie && parseInt(jQuery.browser.version, 10) <= 8);
+    useIeTransforms = function() {
+        var modElem = document.createElement('modernizr'),
+            mStyle = modElem.style,
+            omPrefixes = 'Webkit Moz O ms',
+            domPrefixes = omPrefixes.toLowerCase().split(' '),
+            props = ("transform" + ' ' + domPrefixes.join("Transform ") + "Transform").split(' ');
+        /*using 'for' loop instead of 'for in' to avoid issues in IE8*/
+        for ( var i=0; i< props.length;i++ ) {
+            var prop = props[i];
+            if ( prop.indexOf("-") == -1 && mStyle[prop] !== undefined ) {
+                return false;
+            }
+        }
+        return true;
+    }();
 
 $.widget( "ui.iviewer", $.ui.mouse, {
     widgetEventPrefix: "iviewer",
